@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UPKI TSV Viewer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Light Theme (Default) */
+            --bg-color: #f8fafc;
+            --surface-color: #ffffff;
+            --surface-hover: #f1f5f9;
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --glass-border: rgba(0, 0, 0, 0.05);
+            --bg-gradient: radial-gradient(circle at top right, #e0e7ff, transparent 40%), radial-gradient(circle at bottom left, #f8fafc, transparent 40%);
+            --header-text: #2563eb;
+        }
+
+        [data-theme="dark"] {
+            /* Dark Theme */
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --surface-hover: #334155;
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --bg-gradient: radial-gradient(circle at top right, #1e1b4b, transparent 40%), radial-gradient(circle at bottom left, #0f172a, transparent 40%);
+            --header-text: transparent;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            background-image: var(--bg-gradient);
+            background-attachment: fixed;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--glass-border);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--header-text);
+            margin: 0;
+        }
+
+        [data-theme="dark"] h1 {
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        main {
+            flex: 1;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            max-width: 100vw;
+        }
+
+        /* Drop Zone */
+        #drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 16px;
+            padding: 3rem 2rem;
+            text-align: center;
+            background: rgba(30, 41, 59, 0.4);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #drop-zone:hover,
+        #drop-zone.dragover {
+            border-color: var(--primary-color);
+            background: rgba(59, 130, 246, 0.1);
+            transform: translateY(-2px);
+        }
+
+        #drop-zone p {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        #drop-zone input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+            background: var(--surface-color);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+        }
+
+        .btn-outline:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .search-container {
+            display: flex;
+            flex: 1;
+            gap: 0.5rem;
+            min-width: 250px;
+        }
+
+        .search-input {
+            flex: 1;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        /* Column Selector Modal */
+        .col-selector-wrapper {
+            position: relative;
+        }
+
+        .col-selector-popup {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            left: 0;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+            width: 280px;
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 50;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            display: none;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .col-selector-popup.show {
+            display: flex;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .col-option {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.9rem;
+            color: var(--text-main);
+            cursor: pointer;
+            padding: 0.25rem 0;
+        }
+
+        .col-option input[type="checkbox"] {
+            accent-color: var(--primary-color);
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        /* Table Container */
+        .table-container {
+            background: var(--surface-color);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            overflow: auto;
+            max-height: calc(100vh - 280px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        th {
+            background: var(--bg-color);
+            color: var(--text-muted);
+            font-weight: 600;
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            white-space: nowrap;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-main);
+            vertical-align: top;
+            max-width: 300px;
+            word-break: break-word;
+        }
+
+        tbody tr {
+            transition: background-color 0.15s;
+        }
+
+        tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.03);
+        }
+
+        .hidden-col {
+            display: none !important;
+        }
+
+        .hidden-row {
+            display: none !important;
+        }
+
+        /* Utilities */
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-top: 1rem;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .empty-state {
+            padding: 3rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-color);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--surface-hover);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            display: none;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .modal-content {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-size: 1.2rem;
+            color: var(--text-main);
+            margin: 0;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        .modal-close:hover {
+            color: var(--text-main);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .modal-body pre {
+            background: var(--bg-color);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--text-main);
+            margin: 0;
+        }
+
+        .btn-sm {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.8rem;
+        }
+
+        .quick-filters {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+            background: var(--surface-color);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+        }
+
+        .active-filter {
+            background: var(--primary-color) !important;
+            color: white !important;
+            border-color: var(--primary-color) !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <h1 id="app-title">電子証明書 TSV Viewer</h1>
+        <button id="theme-toggle" class="btn btn-outline btn-sm">ダークモード</button>
+    </header>
+
+    <main>
+        <div id="drop-zone">
+            <p>ここにTSVファイルをドロップ、またはクリックしてファイルを選択</p>
+            <span class="badge" id="file-info">未選択</span>
+            <input type="file" id="file-input" multiple accept=".tsv">
+        </div>
+
+        <div class="controls" id="controls" style="display: none;">
+            <div class="col-selector-wrapper">
+                <button class="btn btn-outline" id="toggle-cols-btn">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z">
+                        </path>
+                    </svg>
+                    表示/非表示
+                </button>
+                <div class="col-selector-popup" id="col-selector-popup">
+                    <!-- Checkboxes will be injected here -->
+                </div>
+            </div>
+
+            <div class="search-container">
+                <input type="text" id="search-input" class="search-input" placeholder="任意の項目を検索...">
+                <button class="btn" id="search-btn">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    検索
+                </button>
+            </div>
+        </div>
+
+        <div class="quick-filters" id="quick-filters" style="display: none;">
+            <button class="btn btn-outline btn-sm" onclick="resetFilters()">リセット</button>
+            <button class="btn btn-outline btn-sm" onclick="exportData()">表示結果をエクスポート</button>
+            <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 0.5rem;">最終更新日:</span>
+            <button class="btn btn-outline btn-sm date-filter-btn"
+                onclick="setDateFilter('最終更新日', 'past', 7, this)">1週間以内</button>
+            <button class="btn btn-outline btn-sm date-filter-btn"
+                onclick="setDateFilter('最終更新日', 'past', 30, this)">1ヶ月以内</button>
+            <button class="btn btn-outline btn-sm date-filter-btn"
+                onclick="setDateFilter('最終更新日', 'past', 90, this)">3ヶ月以内</button>
+            <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 0.5rem;">有効期限:</span>
+            <button class="btn btn-outline btn-sm date-filter-btn"
+                onclick="setDateFilter('発行・更新申請-証明書有効期限', 'future', 7, this)">1週間以内</button>
+            <button class="btn btn-outline btn-sm date-filter-btn"
+                onclick="setDateFilter('発行・更新申請-証明書有効期限', 'future', 30, this)">30日以内</button>
+        </div>
+
+        <div class="table-container" id="table-container" style="display: none;">
+            <table id="data-table">
+                <thead id="table-head"></thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="content-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">内容</h2>
+                <button class="modal-close" id="modal-close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <pre id="modal-text"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileInfo = document.getElementById('file-info');
+        const controls = document.getElementById('controls');
+        const tableContainer = document.getElementById('table-container');
+        const tableHead = document.getElementById('table-head');
+        const tableBody = document.getElementById('table-body');
+        const toggleColsBtn = document.getElementById('toggle-cols-btn');
+        const colSelectorPopup = document.getElementById('col-selector-popup');
+        const searchInput = document.getElementById('search-input');
+        const searchBtn = document.getElementById('search-btn');
+        const themeToggleBtn = document.getElementById('theme-toggle');
+
+        themeToggleBtn.addEventListener('click', () => {
+            const isDark = document.body.getAttribute('data-theme') === 'dark';
+            if (isDark) {
+                document.body.removeAttribute('data-theme');
+                themeToggleBtn.textContent = 'ダークモード';
+            } else {
+                document.body.setAttribute('data-theme', 'dark');
+                themeToggleBtn.textContent = 'ライトモード';
+            }
+        });
+
+        // State
+        let currentHeaders = [];
+        let currentData = []; // Array of objects
+        let columnVisibility = {}; // { 'colName': true/false }
+        let currentSearchQuery = "";
+        let activeDateFilter = null;
+
+        // Value Mapping based on base.md
+        const MAPS_ACME = {
+            '申請種別': {
+                '1': '1:ACME作成',
+                '2': '2:ACME更新',
+                '3': '3:ACME削除'
+            },
+            '状態': {
+                '1': '1:ACME有効',
+                '2': '2:ACME無効',
+                '-1': '-1:フォーマットエラー',
+                '-2': '-2:ACME連携処理エラー'
+            },
+            '証明書プロファイルID': {
+                '3': '3:サーバ証明書（sha256WithRSAEncryption）',
+                '11': '11:サーバ証明書（ecdsa-with-SHA384）'
+            },
+            '停止理由コード': {
+                '0': '0:unspecified(未定義)',
+                '1': '1:keyCompromise(秘密鍵の漏洩による証明書の脆弱化)',
+                '3': '3:affiliationChanged(主体の所属変更)',
+                '4': '4:superseded(証明書の更新)',
+                '5': '5:cessationOfOperation(証明書の運用停止)'
+            }
+        };
+
+        const MAPS_CERT = {
+            '証明書プロファイルID': {
+                '1': '1:サーバ証明書（sha1WithRSAEncryption）（有効期限：2016年12月31日まで）',
+                '2': '2:サーバ証明書（sha1WithRSAEncryption）（有効期限：2015年12月31日まで）',
+                '3': '3:サーバ証明書（sha256WithRSAEncryption）',
+                '4': '4:クライアント証明書（sha1WithRSAEncryption）（有効期限：2016年12月31日まで）',
+                '5': '5:クライアント証明書（sha256WithRSAEncryption）(証明書有効期間:52ヶ月)',
+                '6': '6:S/MIME証明書（sha1WithRSAEncryption）（有効期限：2016年12月31日まで）',
+                '7': '7:S/MIME証明書（sha256WithRSAEncryption）(2022年3月22日以降は証明書有効期間:823日。それ以前は証明書有効期間:52ヶ月)',
+                '8': '8:コード署名用証明書（sha1WithRSAEncryption）（有効期限：2016年12月31日まで）',
+                '9': '9:コード署名用証明書（sha256WithRSAEncryption）',
+                '11': '11:サーバ証明書（ecdsa-with-SHA384）',
+                '13': '13:クライアント証明書（sha256WithRSAEncryption）(証明書有効期間:13ヶ月)',
+                '14': '14:クライアント証明書（sha256WithRSAEncryption）(証明書有効期間:25ヶ月)',
+                '15': '15:S/MIME証明書（sha256WithRSAEncryption）(証明書有効期間:13ヶ月)',
+                '16': '16:S/MIME証明書（sha256WithRSAEncryption）(証明書有効期間:25ヶ月)'
+            },
+            '状態': {
+                '0': '0:証明書発行処理中',
+                '1': '1:証明書更新処理中',
+                '2': '2:証明書失効処理中',
+                '3': '3:発行案内メール送信待ち',
+                '4': '4:発行案内メール送信済み',
+                '5': '5:証明書発行処理完了',
+                '6': '6:証明書更新処理完了',
+                '7': '7:証明書失効処理完了',
+                '8': '8:新証明書への置き換え待ち',
+                '9': '9:発行・更新完了メール送信待ち',
+                '10': '10:失効完了メール送信待ち',
+                '-1': '-1:フォーマットエラー',
+                '-2': '-2:認証局連携API処理エラー',
+                '-3': '-3:支援システム実行エラー'
+            },
+            '失効申請-失効理由コード': {
+                '0': '0:unspecified(未定義)',
+                '1': '1:keyCompromise(秘密鍵の漏洩)',
+                '3': '3:affiliationChanged(利用管理者DNの変更)',
+                '4': '4:superseded(証明書の更新)',
+                '5': '5:cessationOfOperation(証明書の運用停止)'
+            },
+            'ダウンロード方法': {
+                '1': '1:P12個別',
+                '2': '2:P12一括',
+                '3': '3:ブラウザ発行',
+                '4': '4:CSR発行'
+            }
+        };
+
+        let currentTsvType = 'UNKNOWN'; // 'ACME', 'CERT', or 'UNKNOWN'
+
+        // Event Listeners for Drag & Drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', handleFileSelect, false);
+
+        // Search Events
+        searchBtn.addEventListener('click', handleSearch);
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleSearch();
+        });
+
+        // Toggle Columns Event
+        toggleColsBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            colSelectorPopup.classList.toggle('show');
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!colSelectorPopup.contains(e.target) && e.target !== toggleColsBtn) {
+                colSelectorPopup.classList.remove('show');
+            }
+        });
+
+        // Modal Events
+        document.getElementById('modal-close-btn').addEventListener('click', () => {
+            document.getElementById('content-modal').classList.remove('show');
+        });
+        document.getElementById('content-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('content-modal')) {
+                document.getElementById('content-modal').classList.remove('show');
+            }
+        });
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            processFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            processFiles(files);
+        }
+
+        function processFiles(files) {
+            if (!files || files.length === 0) return;
+
+            // Filter for TSV
+            let tsvFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.tsv'));
+
+            if (tsvFiles.length === 0) {
+                alert("TSVファイルが見つかりません。拡張子が .tsv のファイルを選択してください。");
+                return;
+            }
+
+            // Get newest file
+            tsvFiles.sort((a, b) => b.lastModified - a.lastModified);
+            const newestFile = tsvFiles[0];
+
+            fileInfo.textContent = `読み込み中: ${newestFile.name} (${formatDate(newestFile.lastModified)})`;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                parseTSV(e.target.result);
+                fileInfo.textContent = `読み込み完了: ${newestFile.name}`;
+                controls.style.display = 'flex';
+                document.getElementById('quick-filters').style.display = 'flex';
+                tableContainer.style.display = 'block';
+            };
+            reader.onerror = function () {
+                alert("ファイルの読み込みに失敗しました。");
+                fileInfo.textContent = "エラー";
+            };
+            // Read as Shift_JIS
+            reader.readAsText(newestFile, 'Shift_JIS');
+        }
+
+        function formatDate(timestamp) {
+            const d = new Date(timestamp);
+            return `${d.getFullYear()}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        }
+
+        function parseTSV(text) {
+            const lines = text.split(/\r?\n/);
+            if (lines.length < 1) return;
+
+            currentHeaders = lines[0].split('\t');
+
+            const colCount = currentHeaders.length;
+            const titleElement = document.getElementById('app-title');
+            if (colCount === 20) {
+                currentTsvType = 'ACME';
+                titleElement.textContent = 'ACME情報ビューア';
+            } else if (colCount >= 46) {
+                currentTsvType = 'CERT';
+                titleElement.textContent = 'サーバ証明書・クライアント証明書情報ビューア';
+            } else {
+                currentTsvType = 'UNKNOWN';
+                titleElement.textContent = `TSV ビューア (種別不明: ${colCount}列)`;
+            }
+
+            currentData = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const rowArr = lines[i].split('\t');
+                let rowObj = {};
+                for (let j = 0; j < currentHeaders.length; j++) {
+                    rowObj[currentHeaders[j]] = rowArr[j] || '';
+                }
+                currentData.push(rowObj);
+            }
+
+            // Initialize column visibility
+            columnVisibility = {};
+            currentHeaders.forEach(h => {
+                if (h === 'CSR' || h === '発行・更新申請-証明書') {
+                    columnVisibility[h] = false;
+                } else {
+                    columnVisibility[h] = true;
+                }
+            });
+
+            renderColSelector();
+            renderTable();
+        }
+
+        function renderColSelector() {
+            colSelectorPopup.innerHTML = '';
+            currentHeaders.forEach(header => {
+                const label = document.createElement('label');
+                label.className = 'col-option';
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = columnVisibility[header];
+                cb.dataset.col = header;
+
+                cb.addEventListener('change', (e) => {
+                    columnVisibility[header] = e.target.checked;
+                    updateTableVisibility();
+                });
+
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(header));
+                colSelectorPopup.appendChild(label);
+            });
+        }
+
+        function processCellValue(header, value) {
+            let processed = value;
+
+            const activeMap = currentTsvType === 'ACME' ? MAPS_ACME : (currentTsvType === 'CERT' ? MAPS_CERT : null);
+
+            // Map specific fields
+            if (activeMap && activeMap[header] && activeMap[header][value]) {
+                processed = activeMap[header][value];
+            }
+
+            return processed;
+        }
+
+        function encodeBase64(str) {
+            return btoa(unescape(encodeURIComponent(str)));
+        }
+
+        function decodeBase64(b64) {
+            return decodeURIComponent(escape(atob(b64)));
+        }
+
+        function openModal(title, element) {
+            const b64Content = element.getAttribute('data-content');
+            const modal = document.getElementById('content-modal');
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-text').textContent = decodeBase64(b64Content);
+            modal.classList.add('show');
+        }
+
+        function formatCellDisplay(header, value) {
+            let processed = processCellValue(header, value);
+
+            // Handle large content columns
+            if ((header === 'CSR' || header === '発行・更新申請-証明書') && processed.trim() !== '') {
+                const b64 = encodeBase64(processed);
+                return `<button class="btn btn-outline btn-sm" onclick="openModal('${header}', this)" data-content="${b64}">内容を表示</button>`;
+            }
+
+            // Handle dNSName line breaks
+            if (header === 'dNSName') {
+                return processed.replace(/,/g, '<br>');
+            }
+
+            // Escape HTML for safety but allow <br> for others if needed
+            const div = document.createElement('div');
+            div.textContent = processed;
+            return div.innerHTML;
+        }
+
+        function renderTable() {
+            // Render Header
+            tableHead.innerHTML = '';
+            const trHead = document.createElement('tr');
+            currentHeaders.forEach(header => {
+                const th = document.createElement('th');
+                th.textContent = header;
+                th.dataset.col = header;
+                if (!columnVisibility[header]) th.classList.add('hidden-col');
+                trHead.appendChild(th);
+            });
+            tableHead.appendChild(trHead);
+
+            // Render Body
+            tableBody.innerHTML = '';
+
+            if (currentData.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = currentHeaders.length;
+                td.className = 'empty-state';
+                td.textContent = 'データがありません';
+                tr.appendChild(td);
+                tableBody.appendChild(tr);
+                return;
+            }
+
+            currentData.forEach((row, rowIndex) => {
+                const tr = document.createElement('tr');
+                tr.id = `row-${rowIndex}`;
+
+                currentHeaders.forEach(header => {
+                    const td = document.createElement('td');
+                    td.dataset.col = header;
+                    td.innerHTML = formatCellDisplay(header, row[header]);
+                    if (!columnVisibility[header]) td.classList.add('hidden-col');
+                    tr.appendChild(td);
+                });
+
+                tableBody.appendChild(tr);
+            });
+
+            applySearchFilter();
+        }
+
+        function updateTableVisibility() {
+            // Update Headers
+            const ths = tableHead.querySelectorAll('th');
+            ths.forEach(th => {
+                const col = th.dataset.col;
+                if (columnVisibility[col]) {
+                    th.classList.remove('hidden-col');
+                } else {
+                    th.classList.add('hidden-col');
+                }
+            });
+
+            // Update Cells
+            const trs = tableBody.querySelectorAll('tr[id^="row-"]');
+            trs.forEach(tr => {
+                const tds = tr.querySelectorAll('td');
+                tds.forEach(td => {
+                    const col = td.dataset.col;
+                    if (columnVisibility[col]) {
+                        td.classList.remove('hidden-col');
+                    } else {
+                        td.classList.add('hidden-col');
+                    }
+                });
+            });
+        }
+
+        function handleSearch() {
+            currentSearchQuery = searchInput.value.toLowerCase().trim();
+            applySearchFilter();
+        }
+
+        function setDateFilter(col, type, days, btnElement) {
+            // Remove active class from all date filter buttons
+            document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+
+            // Toggle off if same button clicked
+            if (activeDateFilter && activeDateFilter.col === col && activeDateFilter.days === days) {
+                activeDateFilter = null;
+            } else {
+                activeDateFilter = { col, type, days };
+                btnElement.classList.add('active-filter');
+            }
+            applySearchFilter();
+        }
+
+        function resetFilters() {
+            searchInput.value = "";
+            currentSearchQuery = "";
+            activeDateFilter = null;
+            document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+            applySearchFilter();
+        }
+
+        function exportData() {
+            const visibleRows = Array.from(tableBody.querySelectorAll('tr:not(.hidden-row)'));
+            if (visibleRows.length === 0) {
+                alert("エクスポートするデータがありません。");
+                return;
+            }
+
+            // Add BOM for Excel
+            let tsvContent = '\uFEFF' + currentHeaders.join('\t') + '\n';
+
+            visibleRows.forEach(tr => {
+                const index = parseInt(tr.id.replace('row-', ''), 10);
+                const rowData = currentData[index];
+                const rowArr = currentHeaders.map(h => rowData[h]);
+                tsvContent += rowArr.join('\t') + '\n';
+            });
+
+            const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'export.tsv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function applySearchFilter() {
+            if (currentData.length === 0) return;
+
+            const trs = tableBody.querySelectorAll('tr[id^="row-"]');
+            const now = new Date();
+            // Start of today for more accurate day diff
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+            trs.forEach((tr, index) => {
+                const rowData = currentData[index];
+                let matchText = false;
+                let matchDate = true;
+
+                // Text filter
+                if (currentSearchQuery === "") {
+                    matchText = true;
+                } else {
+                    for (let i = 0; i < currentHeaders.length; i++) {
+                        const header = currentHeaders[i];
+                        const processedVal = processCellValue(header, rowData[header]).toLowerCase();
+                        if (processedVal.includes(currentSearchQuery)) {
+                            matchText = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Date filter
+                if (activeDateFilter) {
+                    const dateStr = rowData[activeDateFilter.col];
+                    if (!dateStr || dateStr.trim() === '') {
+                        matchDate = false; // Exclude empty dates when filtering
+                    } else {
+                        // Attempt to parse 'YYYY-MM-DD HH:mm:ss' or 'YYYY/MM/DD'
+                        let d = new Date(dateStr.replace(/-/g, '/').split('.')[0]);
+                        if (isNaN(d.getTime())) {
+                            matchDate = false;
+                        } else {
+                            const diffTime = d.getTime() - today.getTime();
+                            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+                            if (activeDateFilter.type === 'past') {
+                                // Past means updated within last X days (0 >= diffDays >= -X)
+                                matchDate = (diffDays <= 1 && diffDays >= -activeDateFilter.days); // allow +1 for "today" time drift
+                            } else if (activeDateFilter.type === 'future') {
+                                // Future means expires within next X days (0 <= diffDays <= X)
+                                matchDate = (diffDays >= -1 && diffDays <= activeDateFilter.days);
+                            }
+                        }
+                    }
+                }
+
+                if (matchText && matchDate) {
+                    tr.classList.remove('hidden-row');
+                } else {
+                    tr.classList.add('hidden-row');
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
