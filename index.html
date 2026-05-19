@@ -772,7 +772,7 @@
             // Initialize column visibility
             columnVisibility = {};
             currentHeaders.forEach(h => {
-                if (h === 'CSR' || h === '発行・更新申請-証明書') {
+                if (h === '発行・更新申請-証明書') {
                     columnVisibility[h] = false;
                 } else {
                     columnVisibility[h] = true;
@@ -826,6 +826,46 @@
             return decodeURIComponent(escape(atob(b64)));
         }
 
+        function formatAsPEM(data, headerText, footerText) {
+            const cleanContent = data.replace(/\s+/g, '');
+            let pemChunks = [];
+            for (let i = 0; i < cleanContent.length; i += 64) {
+                pemChunks.push(cleanContent.substring(i, i + 64));
+            }
+            return `${headerText}\n${pemChunks.join('\n')}\n${footerText}\n`;
+        }
+
+        function triggerDownload(content, filename) {
+            const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadCert(element, type) {
+            const b64Content = element.getAttribute('data-content');
+            const rawContent = decodeBase64(b64Content);
+            const baseFilename = element.getAttribute('data-filename') || 'download';
+            
+            let pemContent = '';
+            let filename = '';
+
+            if (type === 'CSR') {
+                pemContent = formatAsPEM(rawContent, '-----BEGIN NEW CERTIFICATE REQUEST-----', '-----END NEW CERTIFICATE REQUEST-----');
+                filename = `${baseFilename}.csr`;
+            } else if (type === '発行・更新申請-証明書') {
+                pemContent = formatAsPEM(rawContent, '-----BEGIN CERTIFICATE-----', '-----END CERTIFICATE-----');
+                filename = `${baseFilename}.cer`;
+            }
+
+            triggerDownload(pemContent, filename);
+        }
+
         function openModal(title, element) {
             const b64Content = element.getAttribute('data-content');
             const modal = document.getElementById('content-modal');
@@ -834,13 +874,39 @@
             modal.classList.add('show');
         }
 
-        function formatCellDisplay(header, value) {
+        function formatCellDisplay(header, value, row) {
             let processed = processCellValue(header, value);
 
             // Handle large content columns
             if ((header === 'CSR' || header === '発行・更新申請-証明書') && processed.trim() !== '') {
                 const b64 = encodeBase64(processed);
-                return `<button class="btn btn-outline btn-sm" onclick="openModal('${header}', this)" data-content="${b64}">内容を表示</button>`;
+                
+                let baseFilename = 'download';
+                if (row) {
+                    if (row['dNSName']) {
+                        let firstDns = row['dNSName'].split(',')[0];
+                        firstDns = firstDns.replace(/^dNSName[=_]/, '');
+                        baseFilename = firstDns.replace(/[^a-zA-Z0-9.-]/g, '_');
+                    } else if (row['利用管理者DN']) {
+                        const cnMatch = row['利用管理者DN'].match(/CN=([^,]+)/);
+                        if (cnMatch) {
+                            baseFilename = cnMatch[1].replace(/[^a-zA-Z0-9.-]/g, '_');
+                        }
+                    } else if (row['証明書シリアル番号']) {
+                        baseFilename = row['証明書シリアル番号'].replace(/[^a-zA-Z0-9]/g, '');
+                    }
+                }
+
+                return `
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="btn btn-outline btn-sm" onclick="openModal('${header}', this)" data-content="${b64}">内容を表示</button>
+                        <button class="btn btn-sm" onclick="downloadCert(this, '${header}')" data-content="${b64}" data-filename="${baseFilename}">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                            </svg>ダウンロード
+                        </button>
+                    </div>
+                `;
             }
 
             // Handle dNSName line breaks
@@ -888,7 +954,7 @@
                 currentHeaders.forEach(header => {
                     const td = document.createElement('td');
                     td.dataset.col = header;
-                    td.innerHTML = formatCellDisplay(header, row[header]);
+                    td.innerHTML = formatCellDisplay(header, row[header], row);
                     if (!columnVisibility[header]) td.classList.add('hidden-col');
                     tr.appendChild(td);
                 });
