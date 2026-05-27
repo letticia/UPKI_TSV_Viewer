@@ -103,7 +103,7 @@
             padding: 3rem 2rem;
             text-align: center;
             background: rgba(30, 41, 59, 0.4);
-            transition: all 0.3s ease;
+            transition: padding 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
             cursor: pointer;
             position: relative;
             overflow: hidden;
@@ -116,10 +116,29 @@
             transform: translateY(-2px);
         }
 
+        #drop-zone.compact {
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            border-style: solid;
+        }
+
         #drop-zone p {
             font-size: 1.1rem;
             color: var(--text-muted);
             margin-bottom: 1rem;
+            transition: font-size 0.3s ease, margin 0.3s ease;
+        }
+
+        #drop-zone.compact p {
+            font-size: 0.95rem;
+            margin-bottom: 0;
+        }
+
+        #drop-zone.compact .badge {
+            margin-top: 0;
         }
 
         #drop-zone input[type="file"] {
@@ -447,6 +466,183 @@
             color: white !important;
             border-color: var(--primary-color) !important;
         }
+
+        .search-select {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, background-color 0.3s, color 0.3s;
+            max-width: 200px;
+            cursor: pointer;
+        }
+
+        .search-select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .status-success {
+            background-color: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+        [data-theme="dark"] .status-success {
+            background-color: rgba(34, 197, 94, 0.2);
+            color: #4ade80;
+        }
+        .status-warning {
+            background-color: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+        [data-theme="dark"] .status-warning {
+            background-color: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+        }
+        .status-danger {
+            background-color: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        [data-theme="dark"] .status-danger {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+        .status-info {
+            background-color: rgba(59, 130, 246, 0.15);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        [data-theme="dark"] .status-info {
+            background-color: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+        }
+
+        /* Copy Button in Table Cells */
+        .copyable-cell {
+            position: relative;
+            padding-right: 2rem !important;
+        }
+        .copy-cell-btn {
+            position: absolute;
+            right: 0.4rem;
+            top: 0.4rem;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 0.25rem;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s, background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+        }
+        .copyable-cell:hover .copy-cell-btn {
+            opacity: 1;
+        }
+        .copy-cell-btn:hover {
+            background: var(--surface-hover);
+            color: var(--text-main);
+        }
+        
+        /* Dragover Visuals */
+        #drop-zone.dragover {
+            border-color: var(--primary-color);
+            background: rgba(59, 130, 246, 0.15);
+            transform: scale(1.01);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.2);
+            animation: border-dance 1.5s infinite linear;
+        }
+        @keyframes border-dance {
+            0% { border-style: dashed; }
+            50% { border-style: dotted; }
+            100% { border-style: dashed; }
+        }
+        .drop-icon {
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            transition: color 0.3s, transform 0.3s;
+        }
+        #drop-zone:hover .drop-icon,
+        #drop-zone.dragover .drop-icon {
+            color: var(--primary-color);
+        }
+        #drop-zone.compact .drop-icon {
+            margin-bottom: 0;
+            width: 24px;
+            height: 24px;
+        }
+        
+        #drop-zone .drop-zone-dragover {
+            display: none;
+        }
+        #drop-zone.dragover .drop-zone-default {
+            display: none !important;
+        }
+        #drop-zone.dragover .drop-zone-dragover {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+        #drop-zone.compact.dragover .drop-zone-dragover {
+            flex-direction: row;
+            gap: 1rem;
+        }
+        
+        .pulse {
+            animation: pulse-animation 1.5s infinite ease-in-out;
+        }
+        @keyframes pulse-animation {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* Record Count */
+        .record-count {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-left: auto;
+            background: var(--surface-color);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Sorting Styles */
+        th.sorted-col {
+            color: var(--primary-color);
+            background: var(--surface-hover);
+        }
+        
+        /* Modal Copy Toast/Btn */
+        #modal-copy-btn {
+            transition: all 0.2s ease;
+        }
+        #modal-copy-btn.copied {
+            background: #22c55e !important;
+            color: white !important;
+            border-color: #22c55e !important;
+        }
     </style>
 </head>
 
@@ -459,7 +655,18 @@
 
     <main>
         <div id="drop-zone">
-            <p>ここにTSVファイルをドロップ、またはクリックしてファイルを選択</p>
+            <div class="drop-zone-default" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%;">
+                <svg class="drop-icon" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                <p>ここにTSVファイルをドロップ、またはクリックしてファイル選択</p>
+            </div>
+            <div class="drop-zone-dragover">
+                <svg class="drop-icon pulse" width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                </svg>
+                <p>ここにファイルをドロップして読み込み</p>
+            </div>
             <span class="badge" id="file-info">未選択</span>
             <input type="file" id="file-input" multiple accept=".tsv">
         </div>
@@ -481,6 +688,9 @@
             </div>
 
             <div class="search-container">
+                <select id="search-column-select" class="search-select">
+                    <option value="all">すべての列</option>
+                </select>
                 <input type="text" id="search-input" class="search-input" placeholder="任意の項目を検索...">
                 <button class="btn" id="search-btn">
                     <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -508,6 +718,7 @@
                 onclick="setDateFilter('発行・更新申請-証明書有効期限', 'future', 7, this)">1週間以内</button>
             <button class="btn btn-outline btn-sm date-filter-btn"
                 onclick="setDateFilter('発行・更新申請-証明書有効期限', 'future', 30, this)">30日以内</button>
+            <span id="record-count" class="record-count" style="display: none;">表示中: - 件 / 全 - 件</span>
         </div>
 
         <div class="table-container" id="table-container" style="display: none;">
@@ -523,7 +734,15 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modal-title">内容</h2>
-                <button class="modal-close" id="modal-close-btn">&times;</button>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <button class="btn btn-outline btn-sm" id="modal-copy-btn">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="margin-right: 2px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                        </svg>
+                        コピー
+                    </button>
+                    <button class="modal-close" id="modal-close-btn">&times;</button>
+                </div>
             </div>
             <div class="modal-body">
                 <pre id="modal-text"></pre>
@@ -544,7 +763,9 @@
         const colSelectorPopup = document.getElementById('col-selector-popup');
         const searchInput = document.getElementById('search-input');
         const searchBtn = document.getElementById('search-btn');
+        const searchColumnSelect = document.getElementById('search-column-select');
         const themeToggleBtn = document.getElementById('theme-toggle');
+        const modalCopyBtn = document.getElementById('modal-copy-btn');
 
         themeToggleBtn.addEventListener('click', () => {
             const isDark = document.body.getAttribute('data-theme') === 'dark';
@@ -557,12 +778,18 @@
             }
         });
 
+        modalCopyBtn.addEventListener('click', () => {
+            const textToCopy = document.getElementById('modal-text').textContent;
+            copyToClipboard(textToCopy, modalCopyBtn);
+        });
+
         // State
         let currentHeaders = [];
         let currentData = []; // Array of objects
         let columnVisibility = {}; // { 'colName': true/false }
         let currentSearchQuery = "";
         let activeDateFilter = null;
+        let currentSort = { col: null, desc: false };
 
         // Value Mapping based on base.md
         const MAPS_ACME = {
@@ -666,6 +893,7 @@
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') handleSearch();
         });
+        searchColumnSelect.addEventListener('change', handleSearch);
 
         // Toggle Columns Event
         toggleColsBtn.addEventListener('click', (e) => {
@@ -721,8 +949,10 @@
             reader.onload = function (e) {
                 parseTSV(e.target.result);
                 fileInfo.textContent = `読み込み完了: ${newestFile.name}`;
+                dropZone.classList.add('compact');
                 controls.style.display = 'flex';
                 document.getElementById('quick-filters').style.display = 'flex';
+                document.getElementById('record-count').style.display = 'inline-block';
                 tableContainer.style.display = 'block';
             };
             reader.onerror = function () {
@@ -780,7 +1010,18 @@
             });
 
             renderColSelector();
+            updateSearchColumnOptions();
             renderTable();
+        }
+
+        function updateSearchColumnOptions() {
+            searchColumnSelect.innerHTML = '<option value="all">すべての列</option>';
+            currentHeaders.forEach(header => {
+                const opt = document.createElement('option');
+                opt.value = header;
+                opt.textContent = header;
+                searchColumnSelect.appendChild(opt);
+            });
         }
 
         function renderColSelector() {
@@ -874,6 +1115,88 @@
             modal.classList.add('show');
         }
 
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function getStatusBadgeClass(header, value) {
+            const valStr = String(value).trim();
+            if (header === '状態') {
+                if (currentTsvType === 'ACME') {
+                    if (valStr === '1') return 'status-success'; // ACME有効
+                    if (valStr === '2') return 'status-warning'; // ACME無効
+                    return 'status-danger'; // エラー系
+                } else if (currentTsvType === 'CERT') {
+                    if (['5', '6', '7'].includes(valStr)) return 'status-success'; // 完了
+                    if (['-1', '-2', '-3'].includes(valStr)) return 'status-danger'; // エラー系
+                    if (['0', '1', '2', '8', '9', '10'].includes(valStr)) return 'status-info'; // 処理中
+                    return 'status-warning'; // 送信済みなど
+                }
+            }
+            if (header === '申請種別') {
+                if (valStr === '1') return 'status-info';
+                if (valStr === '2') return 'status-success';
+                if (valStr === '3') return 'status-danger';
+            }
+            if (header === 'ダウンロード方法') {
+                return 'status-info';
+            }
+            if (header === '停止理由コード') {
+                if (valStr === '0') return 'status-info';
+                return 'status-warning';
+            }
+            if (header === '失効申請-失効理由コード') {
+                if (valStr === '1') return 'status-danger'; // 鍵漏洩のみ赤
+                return 'status-info'; // 残りは0（未定義）も含めて青
+            }
+            return '';
+        }
+
+        function copyToClipboard(text, buttonElement) {
+            navigator.clipboard.writeText(text).then(() => {
+                if (buttonElement) {
+                    const originalText = buttonElement.innerHTML;
+                    buttonElement.classList.add('copied');
+                    buttonElement.innerHTML = `
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="margin-right: 2px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        コピーしました！
+                    `;
+                    setTimeout(() => {
+                        buttonElement.classList.remove('copied');
+                        buttonElement.innerHTML = originalText;
+                    }, 2000);
+                }
+            }).catch(err => {
+                console.error('コピーに失敗しました: ', err);
+                alert('コピーに失敗しました。');
+            });
+        }
+
+        function copyCellText(element) {
+            const b64Content = element.getAttribute('data-content');
+            const rawContent = decodeBase64(b64Content);
+            
+            navigator.clipboard.writeText(rawContent).then(() => {
+                const originalSvg = element.innerHTML;
+                element.innerHTML = `
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                `;
+                element.style.color = '#22c55e';
+                setTimeout(() => {
+                    element.innerHTML = originalSvg;
+                    element.style.color = '';
+                }, 1500);
+            }).catch(err => {
+                console.error('コピー失敗: ', err);
+            });
+        }
+
         function formatCellDisplay(header, value, row) {
             let processed = processCellValue(header, value);
 
@@ -909,15 +1232,74 @@
                 `;
             }
 
-            // Handle dNSName line breaks
+            // Handle badge mapping columns
+            const badgeClass = getStatusBadgeClass(header, value);
+            if (badgeClass) {
+                return `<span class="status-badge ${badgeClass}">${processed}</span>`;
+            }
+
+            // Handle copyable text cells
+            const copyableHeaders = [
+                'dNSName', '利用管理者DN', '利用管理者DN(再入力)', '証明書DN', 
+                '証明書シリアル番号', 'ACMEID', 'ACMEのディレクトリURL',
+                '発行・更新申請-シリアル番号', '利用管理者FQDN', '主体者DN', '発行・更新申請-申請ID'
+            ];
+            if (copyableHeaders.includes(header) && processed.trim() !== '') {
+                const b64 = encodeBase64(processed);
+                const displayVal = header === 'dNSName' ? processed.replace(/,/g, '<br>') : escapeHtml(processed);
+                
+                return `
+                    <div class="copyable-cell">
+                        <span>${displayVal}</span>
+                        <button class="copy-cell-btn" onclick="copyCellText(this)" data-content="${b64}" title="クリップボードにコピー">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+            }
+
             if (header === 'dNSName') {
                 return processed.replace(/,/g, '<br>');
             }
 
-            // Escape HTML for safety but allow <br> for others if needed
-            const div = document.createElement('div');
-            div.textContent = processed;
-            return div.innerHTML;
+            return escapeHtml(processed);
+        }
+
+        function handleSort(header) {
+            if (currentSort.col === header) {
+                currentSort.desc = !currentSort.desc;
+            } else {
+                currentSort.col = header;
+                currentSort.desc = false;
+            }
+            
+            currentData.sort((a, b) => {
+                let valA = a[header] || '';
+                let valB = b[header] || '';
+                
+                // 日付ソート
+                let dateA = new Date(valA.replace(/-/g, '/').split('.')[0]);
+                let dateB = new Date(valB.replace(/-/g, '/').split('.')[0]);
+                if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
+                    return currentSort.desc ? dateB - dateA : dateA - dateB;
+                }
+                
+                // 数値ソート
+                let numA = parseFloat(valA);
+                let numB = parseFloat(valB);
+                if (!isNaN(numA) && !isNaN(numB)) {
+                    return currentSort.desc ? numB - numA : numA - numB;
+                }
+                
+                // 文字列比較
+                let strA = String(valA).toLowerCase();
+                let strB = String(valB).toLowerCase();
+                return currentSort.desc ? strB.localeCompare(strA) : strA.localeCompare(strB);
+            });
+            
+            renderTable();
         }
 
         function renderTable() {
@@ -926,9 +1308,22 @@
             const trHead = document.createElement('tr');
             currentHeaders.forEach(header => {
                 const th = document.createElement('th');
-                th.textContent = header;
+                th.style.cursor = 'pointer';
+                
+                let indicator = ' ↕';
+                if (currentSort.col === header) {
+                    indicator = currentSort.desc ? ' ⬇' : ' ⬆';
+                    th.classList.add('sorted-col');
+                }
+                
+                th.textContent = header + indicator;
                 th.dataset.col = header;
                 if (!columnVisibility[header]) th.classList.add('hidden-col');
+                
+                th.addEventListener('click', () => {
+                    handleSort(header);
+                });
+                
                 trHead.appendChild(th);
             });
             tableHead.appendChild(trHead);
@@ -961,6 +1356,17 @@
 
                 tableBody.appendChild(tr);
             });
+
+            // 検索結果0件用のメッセージ行をtbodyに追加しておく
+            const noResultsTr = document.createElement('tr');
+            noResultsTr.id = 'no-results-row';
+            noResultsTr.className = 'hidden-row';
+            const noResultsTd = document.createElement('td');
+            noResultsTd.colSpan = currentHeaders.length;
+            noResultsTd.className = 'empty-state';
+            noResultsTd.textContent = '検索条件に一致するデータがありません';
+            noResultsTr.appendChild(noResultsTd);
+            tableBody.appendChild(noResultsTr);
 
             applySearchFilter();
         }
@@ -1014,9 +1420,11 @@
         function resetFilters() {
             searchInput.value = "";
             currentSearchQuery = "";
+            searchColumnSelect.value = "all";
             activeDateFilter = null;
+            currentSort = { col: null, desc: false }; // ソートの初期化
             document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
-            applySearchFilter();
+            renderTable();
         }
 
         function exportData() {
@@ -1054,6 +1462,7 @@
             const now = new Date();
             // Start of today for more accurate day diff
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            let visibleCount = 0;
 
             trs.forEach((tr, index) => {
                 const rowData = currentData[index];
@@ -1064,12 +1473,20 @@
                 if (currentSearchQuery === "") {
                     matchText = true;
                 } else {
-                    for (let i = 0; i < currentHeaders.length; i++) {
-                        const header = currentHeaders[i];
-                        const processedVal = processCellValue(header, rowData[header]).toLowerCase();
+                    const searchCol = searchColumnSelect.value;
+                    if (searchCol === "all") {
+                        for (let i = 0; i < currentHeaders.length; i++) {
+                            const header = currentHeaders[i];
+                            const processedVal = processCellValue(header, rowData[header]).toLowerCase();
+                            if (processedVal.includes(currentSearchQuery)) {
+                                matchText = true;
+                                break;
+                            }
+                        }
+                    } else {
+                        const processedVal = processCellValue(searchCol, rowData[searchCol] || "").toLowerCase();
                         if (processedVal.includes(currentSearchQuery)) {
                             matchText = true;
-                            break;
                         }
                     }
                 }
@@ -1101,10 +1518,27 @@
 
                 if (matchText && matchDate) {
                     tr.classList.remove('hidden-row');
+                    visibleCount++;
                 } else {
                     tr.classList.add('hidden-row');
                 }
             });
+
+            // レコード件数の更新
+            const recordCountEl = document.getElementById('record-count');
+            if (recordCountEl) {
+                recordCountEl.textContent = `表示中: ${visibleCount} 件 / 全 ${currentData.length} 件`;
+            }
+
+            // 0件メッセージの表示制御
+            const noResultsRow = document.getElementById('no-results-row');
+            if (noResultsRow) {
+                if (visibleCount === 0 && currentData.length > 0) {
+                    noResultsRow.classList.remove('hidden-row');
+                } else {
+                    noResultsRow.classList.add('hidden-row');
+                }
+            }
         }
     </script>
 </body>
