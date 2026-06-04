@@ -643,6 +643,64 @@
             color: white !important;
             border-color: #22c55e !important;
         }
+
+        /* Paginator */
+        .paginator {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface-color);
+            padding: 0.75rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            flex-wrap: wrap;
+        }
+        .paginator .page-info {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            min-width: 120px;
+            text-align: center;
+        }
+        .paginator .page-size-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-left: auto;
+        }
+
+        /* Loading Overlay */
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+        }
+        #loading-overlay.show {
+            display: flex;
+        }
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255,255,255,0.2);
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-text {
+            color: #f8fafc;
+            font-size: 1rem;
+            font-weight: 500;
+        }
     </style>
 </head>
 
@@ -727,7 +785,24 @@
                 <tbody id="table-body"></tbody>
             </table>
         </div>
+
+        <div class="paginator" id="paginator" style="display: none;">
+            <button class="btn btn-outline btn-sm" id="prev-page-btn">← 前へ</button>
+            <span class="page-info" id="page-info">1 / 1 ページ</span>
+            <button class="btn btn-outline btn-sm" id="next-page-btn">次へ →</button>
+            <span class="page-size-label">表示件数:</span>
+            <select id="page-size-select" class="search-select" style="max-width: 130px;">
+                <option value="200">200件 / ページ</option>
+                <option value="100">100件 / ページ</option>
+            </select>
+        </div>
     </main>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="loading-spinner"></div>
+        <span class="loading-text" id="loading-text">読み込み中...</span>
+    </div>
 
     <!-- Modal -->
     <div class="modal-overlay" id="content-modal">
@@ -751,22 +826,29 @@
     </div>
 
     <script>
+        // ============================================================
         // DOM Elements
-        const dropZone = document.getElementById('drop-zone');
-        const fileInput = document.getElementById('file-input');
-        const fileInfo = document.getElementById('file-info');
-        const controls = document.getElementById('controls');
-        const tableContainer = document.getElementById('table-container');
-        const tableHead = document.getElementById('table-head');
-        const tableBody = document.getElementById('table-body');
-        const toggleColsBtn = document.getElementById('toggle-cols-btn');
-        const colSelectorPopup = document.getElementById('col-selector-popup');
-        const searchInput = document.getElementById('search-input');
-        const searchBtn = document.getElementById('search-btn');
+        // ============================================================
+        const dropZone        = document.getElementById('drop-zone');
+        const fileInput       = document.getElementById('file-input');
+        const fileInfo        = document.getElementById('file-info');
+        const controls        = document.getElementById('controls');
+        const tableContainer  = document.getElementById('table-container');
+        const tableHead       = document.getElementById('table-head');
+        const tableBody       = document.getElementById('table-body');
+        const toggleColsBtn   = document.getElementById('toggle-cols-btn');
+        const colSelectorPopup= document.getElementById('col-selector-popup');
+        const searchInput     = document.getElementById('search-input');
+        const searchBtn       = document.getElementById('search-btn');
         const searchColumnSelect = document.getElementById('search-column-select');
-        const themeToggleBtn = document.getElementById('theme-toggle');
-        const modalCopyBtn = document.getElementById('modal-copy-btn');
+        const themeToggleBtn  = document.getElementById('theme-toggle');
+        const modalCopyBtn    = document.getElementById('modal-copy-btn');
+        const loadingOverlay  = document.getElementById('loading-overlay');
+        const loadingText     = document.getElementById('loading-text');
 
+        // ============================================================
+        // Theme Toggle
+        // ============================================================
         themeToggleBtn.addEventListener('click', () => {
             const isDark = document.body.getAttribute('data-theme') === 'dark';
             if (isDark) {
@@ -783,15 +865,26 @@
             copyToClipboard(textToCopy, modalCopyBtn);
         });
 
+        // ============================================================
         // State
-        let currentHeaders = [];
-        let currentData = []; // Array of objects
-        let columnVisibility = {}; // { 'colName': true/false }
-        let currentSearchQuery = "";
+        // ============================================================
+        let headers        = [];          // string[]          列名配列
+        let allData        = [];          // string[][]         全行データ（不変）
+        let searchIndex    = [];          // string[]           各行の検索用文字列（事前生成）
+        let headerIndexMap = {};          // { colName: index } 列名→インデックス
+        let filteredIndices = [];         // number[]           絞り込み後の行インデックス
+        let columnVisibility = {};
+        let currentSearchQuery = '';
+        let searchColIndex = -1;          // -1 = 全列
         let activeDateFilter = null;
-        let currentSort = { col: null, desc: false };
+        let currentSort = { col: null, colIndex: -1, desc: false };
+        let currentPage = 0;
+        let PAGE_SIZE = 200;
+        let currentTsvType = 'UNKNOWN';
 
-        // Value Mapping based on base.md
+        // ============================================================
+        // Value Mapping
+        // ============================================================
         const MAPS_ACME = {
             '申請種別': {
                 '1': '1:ACME作成',
@@ -865,9 +958,65 @@
             }
         };
 
-        let currentTsvType = 'UNKNOWN'; // 'ACME', 'CERT', or 'UNKNOWN'
+        // ============================================================
+        // Web Worker Code（インラインBlobで単一HTMLを維持）
+        // MAPS をJSONとして埋め込み、Worker内でパース＋インデックス構築を完結させる
+        // ============================================================
+        function createWorkerCode() {
+            return `
+const MAPS_ACME = ${JSON.stringify(MAPS_ACME)};
+const MAPS_CERT = ${JSON.stringify(MAPS_CERT)};
 
-        // Event Listeners for Drag & Drop
+function resolveMapping(header, value, tsvType) {
+    const activeMap = tsvType === 'ACME' ? MAPS_ACME : (tsvType === 'CERT' ? MAPS_CERT : null);
+    if (activeMap && activeMap[header] && activeMap[header][value]) {
+        return activeMap[header][value];
+    }
+    return value;
+}
+
+self.onmessage = function(e) {
+    const text = e.data;
+    const lines = text.split(/\\r?\\n/);
+
+    if (lines.length < 1) {
+        self.postMessage({ headers: [], allData: [], searchIndex: [], tsvType: 'UNKNOWN' });
+        return;
+    }
+
+    const headers = lines[0].split('\\t');
+    const colCount = headers.length;
+
+    // TSVタイプ判定
+    let tsvType = 'UNKNOWN';
+    if (colCount === 20)       tsvType = 'ACME';
+    else if (colCount >= 46)   tsvType = 'CERT';
+
+    const allData     = [];
+    const searchIndex = [];
+
+    for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const row = lines[i].split('\\t');
+        allData.push(row);
+
+        // 検索インデックスの構築（コードマッピング展開済み・小文字化）
+        const parts = new Array(colCount);
+        for (let j = 0; j < colCount; j++) {
+            const val = row[j] || '';
+            parts[j] = resolveMapping(headers[j], val, tsvType).toLowerCase();
+        }
+        searchIndex.push(parts.join('\\t'));
+    }
+
+    self.postMessage({ headers, allData, searchIndex, tsvType });
+};
+`;
+        }
+
+        // ============================================================
+        // Drag & Drop / File Input
+        // ============================================================
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
         });
@@ -885,17 +1034,357 @@
             dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
         });
 
-        dropZone.addEventListener('drop', handleDrop, false);
-        fileInput.addEventListener('change', handleFileSelect, false);
+        dropZone.addEventListener('drop', (e) => processFiles(e.dataTransfer.files), false);
+        fileInput.addEventListener('change', (e) => processFiles(e.target.files), false);
 
+        function processFiles(files) {
+            if (!files || files.length === 0) return;
+
+            let tsvFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.tsv'));
+            if (tsvFiles.length === 0) {
+                alert('TSVファイルが見つかりません。拡張子が .tsv のファイルを選択してください。');
+                return;
+            }
+
+            // 最新ファイルを選択
+            tsvFiles.sort((a, b) => b.lastModified - a.lastModified);
+            const newestFile = tsvFiles[0];
+
+            showLoading(`読み込み中: ${newestFile.name}`);
+            fileInfo.textContent = `読み込み中: ${newestFile.name}`;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                startWorkerParse(e.target.result, newestFile.name);
+            };
+            reader.onerror = function() {
+                hideLoading();
+                alert('ファイルの読み込みに失敗しました。');
+                fileInfo.textContent = 'エラー';
+            };
+            reader.readAsText(newestFile, 'Shift_JIS');
+        }
+
+        // ============================================================
+        // Web Worker によるパース＋インデックス構築
+        // ============================================================
+        function startWorkerParse(text, filename) {
+            showLoading('データを解析中...');
+
+            const workerBlob = new Blob([createWorkerCode()], { type: 'application/javascript' });
+            const workerUrl  = URL.createObjectURL(workerBlob);
+            const worker     = new Worker(workerUrl);
+
+            worker.onmessage = function({ data }) {
+                URL.revokeObjectURL(workerUrl);
+                worker.terminate();
+
+                onParseComplete(data, filename);
+            };
+
+            worker.onerror = function(err) {
+                URL.revokeObjectURL(workerUrl);
+                hideLoading();
+                alert('データ解析中にエラーが発生しました: ' + err.message);
+                fileInfo.textContent = 'エラー';
+            };
+
+            worker.postMessage(text);
+        }
+
+        function onParseComplete({ headers: h, allData: d, searchIndex: si, tsvType: t }, filename) {
+            // 状態を更新
+            headers     = h;
+            allData     = d;
+            searchIndex = si;
+            currentTsvType = t;
+
+            // ヘッダインデックスマップを構築
+            headerIndexMap = {};
+            headers.forEach((col, i) => { headerIndexMap[col] = i; });
+
+            // アプリタイトルを更新
+            const titleEl = document.getElementById('app-title');
+            if (currentTsvType === 'ACME') {
+                titleEl.textContent = 'ACME情報ビューア';
+            } else if (currentTsvType === 'CERT') {
+                titleEl.textContent = 'サーバ証明書・クライアント証明書情報ビューア';
+            } else {
+                titleEl.textContent = `TSV ビューア (種別不明: ${headers.length}列)`;
+            }
+
+            // 列の表示状態を初期化
+            columnVisibility = {};
+            headers.forEach(col => {
+                columnVisibility[col] = col !== '発行・更新申請-証明書';
+            });
+
+            // フィルタ・ソート・ページを初期化
+            filteredIndices  = allData.map((_, i) => i);
+            currentPage      = 0;
+            currentSort      = { col: null, colIndex: -1, desc: false };
+            currentSearchQuery = '';
+            searchColIndex   = -1;
+            activeDateFilter = null;
+            searchInput.value = '';
+            searchColumnSelect.value = 'all';
+            document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+
+            fileInfo.textContent = `読み込み完了: ${filename} (${allData.length.toLocaleString()} 件)`;
+            dropZone.classList.add('compact');
+            controls.style.display = 'flex';
+            document.getElementById('quick-filters').style.display = 'flex';
+            document.getElementById('record-count').style.display = 'inline-block';
+            tableContainer.style.display = 'block';
+
+            renderColSelector();
+            updateSearchColumnOptions();
+            renderTableHeader();
+            renderPage();
+            hideLoading();
+        }
+
+        // ============================================================
+        // Loading UI
+        // ============================================================
+        function showLoading(msg) {
+            loadingText.textContent = msg || '読み込み中...';
+            loadingOverlay.classList.add('show');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.remove('show');
+        }
+
+        // ============================================================
+        // Filtering（データ層のみ操作、DOM操作なし）
+        // ============================================================
+        function applyFilter() {
+            const query = currentSearchQuery;
+            filteredIndices = [];
+
+            const total = allData.length;
+            for (let i = 0; i < total; i++) {
+                // テキスト検索（事前インデックスを使用）
+                let matchText = true;
+                if (query) {
+                    if (searchColIndex === -1) {
+                        matchText = searchIndex[i].includes(query);
+                    } else {
+                        matchText = (allData[i][searchColIndex] || '').toLowerCase().includes(query);
+                    }
+                }
+
+                // 日付フィルタ
+                let matchDate = true;
+                if (activeDateFilter) {
+                    const dateStr = allData[i][activeDateFilter.colIndex] || '';
+                    matchDate = checkDateFilter(dateStr, activeDateFilter);
+                }
+
+                if (matchText && matchDate) filteredIndices.push(i);
+            }
+
+            // アクティブなソートがあれば適用
+            if (currentSort.col !== null && currentSort.colIndex >= 0) {
+                sortFilteredIndices();
+            }
+
+            currentPage = 0;
+            renderPage();
+            updateRecordCount();
+        }
+
+        function checkDateFilter(dateStr, filter) {
+            if (!dateStr || dateStr.trim() === '') return false;
+            const d = new Date(dateStr.replace(/-/g, '/').split('.')[0]);
+            if (isNaN(d.getTime())) return false;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const diffDays = (d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24);
+            if (filter.type === 'past') {
+                return diffDays <= 1 && diffDays >= -filter.days;
+            } else {
+                return diffDays >= -1 && diffDays <= filter.days;
+            }
+        }
+
+        // ============================================================
+        // Sorting（filteredIndices の並び替えのみ。allData は不変）
+        // ============================================================
+        function sortFilteredIndices() {
+            const ci = currentSort.colIndex;
+            const desc = currentSort.desc;
+            filteredIndices.sort((a, b) => sortCompare(
+                allData[a][ci] || '',
+                allData[b][ci] || '',
+                desc
+            ));
+        }
+
+        function sortCompare(va, vb, desc) {
+            const dateA = new Date(va.replace(/-/g, '/').split('.')[0]);
+            const dateB = new Date(vb.replace(/-/g, '/').split('.')[0]);
+            if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
+                return desc ? dateB - dateA : dateA - dateB;
+            }
+            const numA = parseFloat(va);
+            const numB = parseFloat(vb);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return desc ? numB - numA : numA - numB;
+            }
+            return desc ? vb.localeCompare(va) : va.localeCompare(vb);
+        }
+
+        function handleSort(header) {
+            const colIndex = headerIndexMap[header] ?? -1;
+            if (currentSort.col === header) {
+                currentSort.desc = !currentSort.desc;
+            } else {
+                currentSort.col = header;
+                currentSort.colIndex = colIndex;
+                currentSort.desc = false;
+            }
+            sortFilteredIndices();
+            currentPage = 0;
+            renderPage();
+        }
+
+        // ============================================================
+        // Rendering
+        // ============================================================
+        function renderTableHeader() {
+            tableHead.innerHTML = '';
+            const trHead = document.createElement('tr');
+            headers.forEach(header => {
+                const th = document.createElement('th');
+                th.style.cursor = 'pointer';
+                let indicator = ' ↕';
+                if (currentSort.col === header) {
+                    indicator = currentSort.desc ? ' ⬇' : ' ⬆';
+                    th.classList.add('sorted-col');
+                }
+                th.textContent = header + indicator;
+                th.dataset.col = header;
+                if (!columnVisibility[header]) th.classList.add('hidden-col');
+                th.addEventListener('click', () => handleSort(header));
+                trHead.appendChild(th);
+            });
+            tableHead.appendChild(trHead);
+        }
+
+        function renderPage() {
+            renderTableHeader();
+            tableBody.innerHTML = '';
+
+            if (filteredIndices.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+                td.colSpan = headers.length;
+                td.className = 'empty-state';
+                td.textContent = allData.length === 0
+                    ? 'データがありません'
+                    : '検索条件に一致するデータがありません';
+                tr.appendChild(td);
+                tableBody.appendChild(tr);
+                renderPaginator();
+                updateRecordCount();
+                return;
+            }
+
+            const start = currentPage * PAGE_SIZE;
+            const end   = Math.min(start + PAGE_SIZE, filteredIndices.length);
+            const fragment = document.createDocumentFragment();
+
+            for (let pi = start; pi < end; pi++) {
+                const rowIdx = filteredIndices[pi];
+                const rowArr = allData[rowIdx];
+                const tr = document.createElement('tr');
+                tr.id = `row-${rowIdx}`;
+
+                headers.forEach((header, hi) => {
+                    const td = document.createElement('td');
+                    td.dataset.col = header;
+                    td.innerHTML = formatCellDisplay(header, rowArr[hi] || '', rowArr);
+                    if (!columnVisibility[header]) td.classList.add('hidden-col');
+                    tr.appendChild(td);
+                });
+
+                fragment.appendChild(tr);
+            }
+
+            tableBody.appendChild(fragment);
+            renderPaginator();
+            updateRecordCount();
+            tableContainer.scrollTop = 0;
+        }
+
+        function renderPaginator() {
+            const paginator = document.getElementById('paginator');
+            const totalPages = Math.ceil(filteredIndices.length / PAGE_SIZE);
+
+            if (totalPages <= 1) {
+                paginator.style.display = 'none';
+                return;
+            }
+
+            paginator.style.display = 'flex';
+            document.getElementById('prev-page-btn').disabled = currentPage === 0;
+            document.getElementById('next-page-btn').disabled = currentPage >= totalPages - 1;
+            document.getElementById('page-info').textContent =
+                `${(currentPage + 1).toLocaleString()} / ${totalPages.toLocaleString()} ページ`;
+        }
+
+        function updateRecordCount() {
+            const el = document.getElementById('record-count');
+            if (el) {
+                el.textContent = `表示中: ${filteredIndices.length.toLocaleString()} 件 / 全 ${allData.length.toLocaleString()} 件`;
+            }
+        }
+
+        // ============================================================
         // Search Events
+        // ============================================================
         searchBtn.addEventListener('click', handleSearch);
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') handleSearch();
         });
         searchColumnSelect.addEventListener('change', handleSearch);
 
-        // Toggle Columns Event
+        function handleSearch() {
+            currentSearchQuery = searchInput.value.toLowerCase().trim();
+            const selVal = searchColumnSelect.value;
+            searchColIndex = selVal === 'all' ? -1 : (headerIndexMap[selVal] ?? -1);
+            applyFilter();
+        }
+
+        // ============================================================
+        // Paginator Events
+        // ============================================================
+        document.getElementById('prev-page-btn').addEventListener('click', () => {
+            if (currentPage > 0) {
+                currentPage--;
+                renderPage();
+            }
+        });
+
+        document.getElementById('next-page-btn').addEventListener('click', () => {
+            const totalPages = Math.ceil(filteredIndices.length / PAGE_SIZE);
+            if (currentPage < totalPages - 1) {
+                currentPage++;
+                renderPage();
+            }
+        });
+
+        document.getElementById('page-size-select').addEventListener('change', (e) => {
+            PAGE_SIZE = parseInt(e.target.value, 10);
+            currentPage = 0;
+            renderPage();
+        });
+
+        // ============================================================
+        // Column Visibility
+        // ============================================================
         toggleColsBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             colSelectorPopup.classList.toggle('show');
@@ -907,126 +1396,9 @@
             }
         });
 
-        // Modal Events
-        document.getElementById('modal-close-btn').addEventListener('click', () => {
-            document.getElementById('content-modal').classList.remove('show');
-        });
-        document.getElementById('content-modal').addEventListener('click', (e) => {
-            if (e.target === document.getElementById('content-modal')) {
-                document.getElementById('content-modal').classList.remove('show');
-            }
-        });
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            processFiles(files);
-        }
-
-        function handleFileSelect(e) {
-            const files = e.target.files;
-            processFiles(files);
-        }
-
-        function processFiles(files) {
-            if (!files || files.length === 0) return;
-
-            // Filter for TSV
-            let tsvFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.tsv'));
-
-            if (tsvFiles.length === 0) {
-                alert("TSVファイルが見つかりません。拡張子が .tsv のファイルを選択してください。");
-                return;
-            }
-
-            // Get newest file
-            tsvFiles.sort((a, b) => b.lastModified - a.lastModified);
-            const newestFile = tsvFiles[0];
-
-            fileInfo.textContent = `読み込み中: ${newestFile.name} (${formatDate(newestFile.lastModified)})`;
-
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                parseTSV(e.target.result);
-                fileInfo.textContent = `読み込み完了: ${newestFile.name}`;
-                dropZone.classList.add('compact');
-                controls.style.display = 'flex';
-                document.getElementById('quick-filters').style.display = 'flex';
-                document.getElementById('record-count').style.display = 'inline-block';
-                tableContainer.style.display = 'block';
-            };
-            reader.onerror = function () {
-                alert("ファイルの読み込みに失敗しました。");
-                fileInfo.textContent = "エラー";
-            };
-            // Read as Shift_JIS
-            reader.readAsText(newestFile, 'Shift_JIS');
-        }
-
-        function formatDate(timestamp) {
-            const d = new Date(timestamp);
-            return `${d.getFullYear()}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-        }
-
-        function parseTSV(text) {
-            const lines = text.split(/\r?\n/);
-            if (lines.length < 1) return;
-
-            currentHeaders = lines[0].split('\t');
-
-            const colCount = currentHeaders.length;
-            const titleElement = document.getElementById('app-title');
-            if (colCount === 20) {
-                currentTsvType = 'ACME';
-                titleElement.textContent = 'ACME情報ビューア';
-            } else if (colCount >= 46) {
-                currentTsvType = 'CERT';
-                titleElement.textContent = 'サーバ証明書・クライアント証明書情報ビューア';
-            } else {
-                currentTsvType = 'UNKNOWN';
-                titleElement.textContent = `TSV ビューア (種別不明: ${colCount}列)`;
-            }
-
-            currentData = [];
-
-            for (let i = 1; i < lines.length; i++) {
-                if (!lines[i].trim()) continue;
-                const rowArr = lines[i].split('\t');
-                let rowObj = {};
-                for (let j = 0; j < currentHeaders.length; j++) {
-                    rowObj[currentHeaders[j]] = rowArr[j] || '';
-                }
-                currentData.push(rowObj);
-            }
-
-            // Initialize column visibility
-            columnVisibility = {};
-            currentHeaders.forEach(h => {
-                if (h === '発行・更新申請-証明書') {
-                    columnVisibility[h] = false;
-                } else {
-                    columnVisibility[h] = true;
-                }
-            });
-
-            renderColSelector();
-            updateSearchColumnOptions();
-            renderTable();
-        }
-
-        function updateSearchColumnOptions() {
-            searchColumnSelect.innerHTML = '<option value="all">すべての列</option>';
-            currentHeaders.forEach(header => {
-                const opt = document.createElement('option');
-                opt.value = header;
-                opt.textContent = header;
-                searchColumnSelect.appendChild(opt);
-            });
-        }
-
         function renderColSelector() {
             colSelectorPopup.innerHTML = '';
-            currentHeaders.forEach(header => {
+            headers.forEach(header => {
                 const label = document.createElement('label');
                 label.className = 'col-option';
 
@@ -1046,17 +1418,101 @@
             });
         }
 
-        function processCellValue(header, value) {
-            let processed = value;
+        function updateSearchColumnOptions() {
+            searchColumnSelect.innerHTML = '<option value="all">すべての列</option>';
+            headers.forEach(header => {
+                const opt = document.createElement('option');
+                opt.value = header;
+                opt.textContent = header;
+                searchColumnSelect.appendChild(opt);
+            });
+        }
 
-            const activeMap = currentTsvType === 'ACME' ? MAPS_ACME : (currentTsvType === 'CERT' ? MAPS_CERT : null);
+        function updateTableVisibility() {
+            tableHead.querySelectorAll('th').forEach(th => {
+                th.classList.toggle('hidden-col', !columnVisibility[th.dataset.col]);
+            });
+            tableBody.querySelectorAll('td[data-col]').forEach(td => {
+                td.classList.toggle('hidden-col', !columnVisibility[td.dataset.col]);
+            });
+        }
 
-            // Map specific fields
-            if (activeMap && activeMap[header] && activeMap[header][value]) {
-                processed = activeMap[header][value];
+        // ============================================================
+        // Date Filter / Reset
+        // ============================================================
+        function setDateFilter(col, type, days, btnElement) {
+            document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+
+            if (activeDateFilter && activeDateFilter.col === col && activeDateFilter.days === days) {
+                activeDateFilter = null;
+            } else {
+                const colIndex = headerIndexMap[col] ?? -1;
+                activeDateFilter = { col, colIndex, type, days };
+                btnElement.classList.add('active-filter');
+            }
+            applyFilter();
+        }
+
+        function resetFilters() {
+            searchInput.value      = '';
+            currentSearchQuery     = '';
+            searchColumnSelect.value = 'all';
+            searchColIndex         = -1;
+            activeDateFilter       = null;
+            currentSort            = { col: null, colIndex: -1, desc: false };
+            document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
+            filteredIndices = allData.map((_, i) => i);
+            currentPage = 0;
+            renderPage();
+            updateRecordCount();
+        }
+
+        // ============================================================
+        // Export（filteredIndices の順序・内容をエクスポート）
+        // ============================================================
+        function exportData() {
+            if (filteredIndices.length === 0) {
+                alert('エクスポートするデータがありません。');
+                return;
             }
 
-            return processed;
+            let tsvContent = '\uFEFF' + headers.join('\t') + '\n';
+            filteredIndices.forEach(idx => {
+                tsvContent += allData[idx].join('\t') + '\n';
+            });
+
+            const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = 'export.tsv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // ============================================================
+        // Modal Events
+        // ============================================================
+        document.getElementById('modal-close-btn').addEventListener('click', () => {
+            document.getElementById('content-modal').classList.remove('show');
+        });
+        document.getElementById('content-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('content-modal')) {
+                document.getElementById('content-modal').classList.remove('show');
+            }
+        });
+
+        // ============================================================
+        // Cell Display Utilities
+        // ============================================================
+        function processCellValue(header, value) {
+            const activeMap = currentTsvType === 'ACME' ? MAPS_ACME : (currentTsvType === 'CERT' ? MAPS_CERT : null);
+            if (activeMap && activeMap[header] && activeMap[header][value]) {
+                return activeMap[header][value];
+            }
+            return value;
         }
 
         function encodeBase64(str) {
@@ -1078,9 +1534,9 @@
 
         function triggerDownload(content, filename) {
             const blob = new Blob([content], { type: 'text/plain;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
             a.download = filename;
             document.body.appendChild(a);
             a.click();
@@ -1089,19 +1545,19 @@
         }
 
         function downloadCert(element, type) {
-            const b64Content = element.getAttribute('data-content');
-            const rawContent = decodeBase64(b64Content);
+            const b64Content  = element.getAttribute('data-content');
+            const rawContent  = decodeBase64(b64Content);
             const baseFilename = element.getAttribute('data-filename') || 'download';
-            
+
             let pemContent = '';
-            let filename = '';
+            let filename   = '';
 
             if (type === 'CSR') {
                 pemContent = formatAsPEM(rawContent, '-----BEGIN NEW CERTIFICATE REQUEST-----', '-----END NEW CERTIFICATE REQUEST-----');
-                filename = `${baseFilename}.csr`;
+                filename   = `${baseFilename}.csr`;
             } else if (type === '発行・更新申請-証明書') {
                 pemContent = formatAsPEM(rawContent, '-----BEGIN CERTIFICATE-----', '-----END CERTIFICATE-----');
-                filename = `${baseFilename}.cer`;
+                filename   = `${baseFilename}.cer`;
             }
 
             triggerDownload(pemContent, filename);
@@ -1109,10 +1565,9 @@
 
         function openModal(title, element) {
             const b64Content = element.getAttribute('data-content');
-            const modal = document.getElementById('content-modal');
             document.getElementById('modal-title').textContent = title;
-            document.getElementById('modal-text').textContent = decodeBase64(b64Content);
-            modal.classList.add('show');
+            document.getElementById('modal-text').textContent  = decodeBase64(b64Content);
+            document.getElementById('content-modal').classList.add('show');
         }
 
         function escapeHtml(str) {
@@ -1125,14 +1580,14 @@
             const valStr = String(value).trim();
             if (header === '状態') {
                 if (currentTsvType === 'ACME') {
-                    if (valStr === '1') return 'status-success'; // ACME有効
-                    if (valStr === '2') return 'status-warning'; // ACME無効
-                    return 'status-danger'; // エラー系
+                    if (valStr === '1')  return 'status-success';
+                    if (valStr === '2')  return 'status-warning';
+                    return 'status-danger';
                 } else if (currentTsvType === 'CERT') {
-                    if (['5', '6', '7'].includes(valStr)) return 'status-success'; // 完了
-                    if (['-1', '-2', '-3'].includes(valStr)) return 'status-danger'; // エラー系
-                    if (['0', '1', '2', '8', '9', '10'].includes(valStr)) return 'status-info'; // 処理中
-                    return 'status-warning'; // 送信済みなど
+                    if (['5','6','7'].includes(valStr))         return 'status-success';
+                    if (['-1','-2','-3'].includes(valStr))      return 'status-danger';
+                    if (['0','1','2','8','9','10'].includes(valStr)) return 'status-info';
+                    return 'status-warning';
                 }
             }
             if (header === '申請種別') {
@@ -1140,16 +1595,14 @@
                 if (valStr === '2') return 'status-success';
                 if (valStr === '3') return 'status-danger';
             }
-            if (header === 'ダウンロード方法') {
-                return 'status-info';
-            }
+            if (header === 'ダウンロード方法')    return 'status-info';
             if (header === '停止理由コード') {
                 if (valStr === '0') return 'status-info';
                 return 'status-warning';
             }
             if (header === '失効申請-失効理由コード') {
-                if (valStr === '1') return 'status-danger'; // 鍵漏洩のみ赤
-                return 'status-info'; // 残りは0（未定義）も含めて青
+                if (valStr === '1') return 'status-danger';
+                return 'status-info';
             }
             return '';
         }
@@ -1179,7 +1632,6 @@
         function copyCellText(element) {
             const b64Content = element.getAttribute('data-content');
             const rawContent = decodeBase64(b64Content);
-            
             navigator.clipboard.writeText(rawContent).then(() => {
                 const originalSvg = element.innerHTML;
                 element.innerHTML = `
@@ -1192,32 +1644,36 @@
                     element.innerHTML = originalSvg;
                     element.style.color = '';
                 }, 1500);
-            }).catch(err => {
-                console.error('コピー失敗: ', err);
-            });
+            }).catch(err => console.error('コピー失敗: ', err));
         }
 
-        function formatCellDisplay(header, value, row) {
+        /**
+         * セルの表示HTMLを生成する
+         * @param {string} header  列名
+         * @param {string} value   セルの生値
+         * @param {string[]} rowArr  行データ配列（headerIndexMap 経由でアクセス）
+         */
+        function formatCellDisplay(header, value, rowArr) {
             let processed = processCellValue(header, value);
 
-            // Handle large content columns
+            // 大容量コンテンツ列（CSR / 証明書）
             if ((header === 'CSR' || header === '発行・更新申請-証明書') && processed.trim() !== '') {
                 const b64 = encodeBase64(processed);
-                
+
                 let baseFilename = 'download';
-                if (row) {
-                    if (row['dNSName']) {
-                        let firstDns = row['dNSName'].split(',')[0];
-                        firstDns = firstDns.replace(/^dNSName[=_]/, '');
-                        baseFilename = firstDns.replace(/[^a-zA-Z0-9.-]/g, '_');
-                    } else if (row['利用管理者DN']) {
-                        const cnMatch = row['利用管理者DN'].match(/CN=([^,]+)/);
-                        if (cnMatch) {
-                            baseFilename = cnMatch[1].replace(/[^a-zA-Z0-9.-]/g, '_');
-                        }
-                    } else if (row['証明書シリアル番号']) {
-                        baseFilename = row['証明書シリアル番号'].replace(/[^a-zA-Z0-9]/g, '');
-                    }
+                const dnsIdx  = headerIndexMap['dNSName'];
+                const dnIdx   = headerIndexMap['利用管理者DN'];
+                const snIdx   = headerIndexMap['証明書シリアル番号'];
+
+                if (dnsIdx !== undefined && rowArr[dnsIdx]) {
+                    let firstDns = rowArr[dnsIdx].split(',')[0];
+                    firstDns = firstDns.replace(/^dNSName[=_]/, '');
+                    baseFilename = firstDns.replace(/[^a-zA-Z0-9.-]/g, '_');
+                } else if (dnIdx !== undefined && rowArr[dnIdx]) {
+                    const cnMatch = rowArr[dnIdx].match(/CN=([^,]+)/);
+                    if (cnMatch) baseFilename = cnMatch[1].replace(/[^a-zA-Z0-9.-]/g, '_');
+                } else if (snIdx !== undefined && rowArr[snIdx]) {
+                    baseFilename = rowArr[snIdx].replace(/[^a-zA-Z0-9]/g, '');
                 }
 
                 return `
@@ -1232,22 +1688,23 @@
                 `;
             }
 
-            // Handle badge mapping columns
+            // ステータスバッジ列
             const badgeClass = getStatusBadgeClass(header, value);
             if (badgeClass) {
                 return `<span class="status-badge ${badgeClass}">${processed}</span>`;
             }
 
-            // Handle copyable text cells
+            // コピー可能テキスト列
             const copyableHeaders = [
-                'dNSName', '利用管理者DN', '利用管理者DN(再入力)', '証明書DN', 
+                'dNSName', '利用管理者DN', '利用管理者DN(再入力)', '証明書DN',
                 '証明書シリアル番号', 'ACMEID', 'ACMEのディレクトリURL',
                 '発行・更新申請-シリアル番号', '利用管理者FQDN', '主体者DN', '発行・更新申請-申請ID'
             ];
             if (copyableHeaders.includes(header) && processed.trim() !== '') {
                 const b64 = encodeBase64(processed);
-                const displayVal = header === 'dNSName' ? processed.replace(/,/g, '<br>') : escapeHtml(processed);
-                
+                const displayVal = header === 'dNSName'
+                    ? processed.replace(/,/g, '<br>')
+                    : escapeHtml(processed);
                 return `
                     <div class="copyable-cell">
                         <span>${displayVal}</span>
@@ -1267,278 +1724,12 @@
             return escapeHtml(processed);
         }
 
-        function handleSort(header) {
-            if (currentSort.col === header) {
-                currentSort.desc = !currentSort.desc;
-            } else {
-                currentSort.col = header;
-                currentSort.desc = false;
-            }
-            
-            currentData.sort((a, b) => {
-                let valA = a[header] || '';
-                let valB = b[header] || '';
-                
-                // 日付ソート
-                let dateA = new Date(valA.replace(/-/g, '/').split('.')[0]);
-                let dateB = new Date(valB.replace(/-/g, '/').split('.')[0]);
-                if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) {
-                    return currentSort.desc ? dateB - dateA : dateA - dateB;
-                }
-                
-                // 数値ソート
-                let numA = parseFloat(valA);
-                let numB = parseFloat(valB);
-                if (!isNaN(numA) && !isNaN(numB)) {
-                    return currentSort.desc ? numB - numA : numA - numB;
-                }
-                
-                // 文字列比較
-                let strA = String(valA).toLowerCase();
-                let strB = String(valB).toLowerCase();
-                return currentSort.desc ? strB.localeCompare(strA) : strA.localeCompare(strB);
-            });
-            
-            renderTable();
-        }
-
-        function renderTable() {
-            // Render Header
-            tableHead.innerHTML = '';
-            const trHead = document.createElement('tr');
-            currentHeaders.forEach(header => {
-                const th = document.createElement('th');
-                th.style.cursor = 'pointer';
-                
-                let indicator = ' ↕';
-                if (currentSort.col === header) {
-                    indicator = currentSort.desc ? ' ⬇' : ' ⬆';
-                    th.classList.add('sorted-col');
-                }
-                
-                th.textContent = header + indicator;
-                th.dataset.col = header;
-                if (!columnVisibility[header]) th.classList.add('hidden-col');
-                
-                th.addEventListener('click', () => {
-                    handleSort(header);
-                });
-                
-                trHead.appendChild(th);
-            });
-            tableHead.appendChild(trHead);
-
-            // Render Body
-            tableBody.innerHTML = '';
-
-            if (currentData.length === 0) {
-                const tr = document.createElement('tr');
-                const td = document.createElement('td');
-                td.colSpan = currentHeaders.length;
-                td.className = 'empty-state';
-                td.textContent = 'データがありません';
-                tr.appendChild(td);
-                tableBody.appendChild(tr);
-                return;
-            }
-
-            currentData.forEach((row, rowIndex) => {
-                const tr = document.createElement('tr');
-                tr.id = `row-${rowIndex}`;
-
-                currentHeaders.forEach(header => {
-                    const td = document.createElement('td');
-                    td.dataset.col = header;
-                    td.innerHTML = formatCellDisplay(header, row[header], row);
-                    if (!columnVisibility[header]) td.classList.add('hidden-col');
-                    tr.appendChild(td);
-                });
-
-                tableBody.appendChild(tr);
-            });
-
-            // 検索結果0件用のメッセージ行をtbodyに追加しておく
-            const noResultsTr = document.createElement('tr');
-            noResultsTr.id = 'no-results-row';
-            noResultsTr.className = 'hidden-row';
-            const noResultsTd = document.createElement('td');
-            noResultsTd.colSpan = currentHeaders.length;
-            noResultsTd.className = 'empty-state';
-            noResultsTd.textContent = '検索条件に一致するデータがありません';
-            noResultsTr.appendChild(noResultsTd);
-            tableBody.appendChild(noResultsTr);
-
-            applySearchFilter();
-        }
-
-        function updateTableVisibility() {
-            // Update Headers
-            const ths = tableHead.querySelectorAll('th');
-            ths.forEach(th => {
-                const col = th.dataset.col;
-                if (columnVisibility[col]) {
-                    th.classList.remove('hidden-col');
-                } else {
-                    th.classList.add('hidden-col');
-                }
-            });
-
-            // Update Cells
-            const trs = tableBody.querySelectorAll('tr[id^="row-"]');
-            trs.forEach(tr => {
-                const tds = tr.querySelectorAll('td');
-                tds.forEach(td => {
-                    const col = td.dataset.col;
-                    if (columnVisibility[col]) {
-                        td.classList.remove('hidden-col');
-                    } else {
-                        td.classList.add('hidden-col');
-                    }
-                });
-            });
-        }
-
-        function handleSearch() {
-            currentSearchQuery = searchInput.value.toLowerCase().trim();
-            applySearchFilter();
-        }
-
-        function setDateFilter(col, type, days, btnElement) {
-            // Remove active class from all date filter buttons
-            document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
-
-            // Toggle off if same button clicked
-            if (activeDateFilter && activeDateFilter.col === col && activeDateFilter.days === days) {
-                activeDateFilter = null;
-            } else {
-                activeDateFilter = { col, type, days };
-                btnElement.classList.add('active-filter');
-            }
-            applySearchFilter();
-        }
-
-        function resetFilters() {
-            searchInput.value = "";
-            currentSearchQuery = "";
-            searchColumnSelect.value = "all";
-            activeDateFilter = null;
-            currentSort = { col: null, desc: false }; // ソートの初期化
-            document.querySelectorAll('.date-filter-btn').forEach(btn => btn.classList.remove('active-filter'));
-            renderTable();
-        }
-
-        function exportData() {
-            const visibleRows = Array.from(tableBody.querySelectorAll('tr:not(.hidden-row)'));
-            if (visibleRows.length === 0) {
-                alert("エクスポートするデータがありません。");
-                return;
-            }
-
-            // Add BOM for Excel
-            let tsvContent = '\uFEFF' + currentHeaders.join('\t') + '\n';
-
-            visibleRows.forEach(tr => {
-                const index = parseInt(tr.id.replace('row-', ''), 10);
-                const rowData = currentData[index];
-                const rowArr = currentHeaders.map(h => rowData[h]);
-                tsvContent += rowArr.join('\t') + '\n';
-            });
-
-            const blob = new Blob([tsvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'export.tsv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }
-
-        function applySearchFilter() {
-            if (currentData.length === 0) return;
-
-            const trs = tableBody.querySelectorAll('tr[id^="row-"]');
-            const now = new Date();
-            // Start of today for more accurate day diff
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            let visibleCount = 0;
-
-            trs.forEach((tr, index) => {
-                const rowData = currentData[index];
-                let matchText = false;
-                let matchDate = true;
-
-                // Text filter
-                if (currentSearchQuery === "") {
-                    matchText = true;
-                } else {
-                    const searchCol = searchColumnSelect.value;
-                    if (searchCol === "all") {
-                        for (let i = 0; i < currentHeaders.length; i++) {
-                            const header = currentHeaders[i];
-                            const processedVal = processCellValue(header, rowData[header]).toLowerCase();
-                            if (processedVal.includes(currentSearchQuery)) {
-                                matchText = true;
-                                break;
-                            }
-                        }
-                    } else {
-                        const processedVal = processCellValue(searchCol, rowData[searchCol] || "").toLowerCase();
-                        if (processedVal.includes(currentSearchQuery)) {
-                            matchText = true;
-                        }
-                    }
-                }
-
-                // Date filter
-                if (activeDateFilter) {
-                    const dateStr = rowData[activeDateFilter.col];
-                    if (!dateStr || dateStr.trim() === '') {
-                        matchDate = false; // Exclude empty dates when filtering
-                    } else {
-                        // Attempt to parse 'YYYY-MM-DD HH:mm:ss' or 'YYYY/MM/DD'
-                        let d = new Date(dateStr.replace(/-/g, '/').split('.')[0]);
-                        if (isNaN(d.getTime())) {
-                            matchDate = false;
-                        } else {
-                            const diffTime = d.getTime() - today.getTime();
-                            const diffDays = diffTime / (1000 * 60 * 60 * 24);
-
-                            if (activeDateFilter.type === 'past') {
-                                // Past means updated within last X days (0 >= diffDays >= -X)
-                                matchDate = (diffDays <= 1 && diffDays >= -activeDateFilter.days); // allow +1 for "today" time drift
-                            } else if (activeDateFilter.type === 'future') {
-                                // Future means expires within next X days (0 <= diffDays <= X)
-                                matchDate = (diffDays >= -1 && diffDays <= activeDateFilter.days);
-                            }
-                        }
-                    }
-                }
-
-                if (matchText && matchDate) {
-                    tr.classList.remove('hidden-row');
-                    visibleCount++;
-                } else {
-                    tr.classList.add('hidden-row');
-                }
-            });
-
-            // レコード件数の更新
-            const recordCountEl = document.getElementById('record-count');
-            if (recordCountEl) {
-                recordCountEl.textContent = `表示中: ${visibleCount} 件 / 全 ${currentData.length} 件`;
-            }
-
-            // 0件メッセージの表示制御
-            const noResultsRow = document.getElementById('no-results-row');
-            if (noResultsRow) {
-                if (visibleCount === 0 && currentData.length > 0) {
-                    noResultsRow.classList.remove('hidden-row');
-                } else {
-                    noResultsRow.classList.add('hidden-row');
-                }
-            }
+        // ============================================================
+        // Utilities
+        // ============================================================
+        function formatDate(timestamp) {
+            const d = new Date(timestamp);
+            return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
         }
     </script>
 </body>
